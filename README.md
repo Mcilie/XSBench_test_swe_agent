@@ -8,26 +8,25 @@ XSBench is a mini-app representing a key computational kernel of the Monte Carlo
 
 ## Table of Contents
 
-1. [Understanding the FOM](#understanding-the-xsbench-figure-of-merit)
-2. [Selecting a Programming Model](#selecting-a-programming-model)
-3. [Compilation](#compilation)
-4. [Running XSBench / Command Line Interface](#running-xsbench)
-5. [Feature Discussion](#feature-discussion)
-	* [MPI Support](#mpi-support)
-	* [AML Optimizations](#aml-optimizations)
-	* [Verification Support](#verification-support)
-	* [Binary File Support](#binary-file-support)
-6. [Theory & Algorithms](#algorithms)
-	* [Transport Simulation Styles](#transport-simulation-styles)
+- [Table of Contents](#table-of-contents)
+- [Understanding the XSBench Figure of Merit](#understanding-the-xsbench-figure-of-merit)
+- [Selecting A Programming Model](#selecting-a-programming-model)
+- [Compilation](#compilation)
+	- [Debugging, Optimization \& Profiling](#debugging-optimization--profiling)
+- [Running XSBench](#running-xsbench)
+- [Feature Discussion](#feature-discussion)
+	- [Binary File Support](#binary-file-support)
+- [Algorithms](#algorithms)
+	- [Transport Simulation Styles](#transport-simulation-styles)
 		- [History-Based Transport](#history-based-transport)
 		- [Event-Based Transport](#event-based-transport)
-	* [Cross Section Lookup Methods](#cross-section-lookup-methods)
+	- [Cross Section (XS) Lookup Methods](#cross-section-xs-lookup-methods)
 		- [Nuclide Grid](#nuclide-grid)
 		- [Unionized Energy Grid](#unionized-energy-grid)
 		- [Logarithmic Hash Grid](#logarithmic-hash-grid)
-7. [Optimized Kernels](#optimized-kernels)
-8. [Citing XSBench](#citing-xsbench)
-9. [Development Team](#development-team) 
+- [Optimized Kernels](#optimized-kernels)
+- [Citing XSBench](#citing-xsbench)
+- [Development Team](#development-team)
 
 ## Understanding the XSBench Figure of Merit
 
@@ -37,25 +36,12 @@ In some cases, users may want to extend the runtime of XSBench (e.g., for invest
 
 ## Selecting A Programming Model
 
-XSBench has been implemented in multiple different languages to target a variety of computational architectures and accelerators. The available implementations can be found in their own directories:
+XSBench needs to be implemented in multiple different languages to target a variety of computational architectures and accelerators. The available implementations can be found in their own directories:
 
-1. **XSBench/openmp-threading**
-This is the "default" version of XSBench that is appropriate for serial and multicore CPU architectures. The method of parallelism is via the OpenMP threading model.
 
-2. **XSBench/openmp-offload**
-This method of parallelism uses OpenMP 4.5 (or newer) to map program data to a remote accelerator memory space and run targeted kernels on the accelerator. This method of parallelism could be used for a wide variety of architectures (besides CPUs) that support OpenMP 4.5 targeting. NOTE: The Makefile will likely not work by default and will need to be adjusted to utilize your OpenMP accelerator compiler.
-
-3. **XSBench/cuda**
+1. **XSBench/cuda**
 This version of XSBench is written in CUDA for use with NVIDIA GPU architectures. NOTE: You will likely want to specify in the makefile the SM version for the card you are running on.
 
-4. **XSBench/opencl**
-This version of XSBench is written in OpenCL, and can be used for CPU, GPU, FPGA, or other architectures that support OpenCL. It was written with GPUs in mind, so if running on other architectures you may need to heavily re-optimize the code. You will also likely need to edit the makefile to supply the path to your OpenCL compiler.
-
-4. **XSBench/sycl**
-This version of XSBench is written in SYCL, and can be used for CPU, GPU, FPGA, or other architectures that support OpenCL and SYCL. It was written with GPUs in mind, so if running on other architectures you may need to heavily re-optimize the code. You will also likely need to edit the makefile to supply the path to your SYCL compiler.
-
-5. **XSBench/hip**
-This version of XSBench is written in HIP for use with GPU architectures. This version is derived from CUDA using an automatic conversion tool with only a few small manual changes.
 
 ## Compilation
 
@@ -139,27 +125,11 @@ Sets the number of hash bins (only relevant when using the hash lookup algorithm
 This optional mode can read or write the simulation data structures to disk. Options are ("read" or "write"). This may be useful if it is necessary to minimize the initialization phase of the program, which has a non-trivial runtime. The generated file is named "XS_data.dat" and will be located in the current working directory. The same file name and location will be used when reading. Note that as the file is binary, it may not be portable between compilers and computer systems. NOTE: When running in the "read" mode, you must be running with an identical program configuration as when the file was generated. E.g., if the file was generated with the "-G nuclide" argument, subsequent runs reading from that file must use the same configuration flags.
 
 - **-k [kernel]**
-For some of the XSBench code-bases (e.g., openmp-threading and cuda) there are several optimized variants of the main kernel. All source bases run basically the same "baseline" kernel as default. Optimized kernels can be selected at runtime with this argument. Default is "0" for the baseline, other variants are numbered 1, 2, ... etc. People interested in implementing their own optimized variants are encouraged to use this interface for convenience rather than writing over the main kernel. The baseline kernel is defined at the top of the "Simulation.c" source file, with the other variants being defined towards the end of the file after a large comment block delineation. The optimized variants are related to different ways of sorting the sampled values such that there is less thread divergence and much better cache re-usage when executing the lookup kernel on contiguous sorted elements. More details can be found in the [Optimized Kernels](#Optimized-Kernels) section.
+For some of the XSBench code-bases there are several optimized variants of the main kernel. All source bases run basically the same "baseline" kernel as default. Optimized kernels can be selected at runtime with this argument. Default is "0" for the baseline, other variants are numbered 1, 2, ... etc. People interested in implementing their own optimized variants are encouraged to use this interface for convenience rather than writing over the main kernel. The baseline kernel is defined at the top of the "Simulation.c" source file, with the other variants being defined towards the end of the file after a large comment block delineation. The optimized variants are related to different ways of sorting the sampled values such that there is less thread divergence and much better cache re-usage when executing the lookup kernel on contiguous sorted elements. More details can be found in the [Optimized Kernels](#Optimized-Kernels) section.
 
 ## Feature Discussion
 
-### MPI Support
 
-While XSBench is primarily used to investigate "on node parallelism" issues, some systems provide power & performance statistics batched in multi-node configurations. To accommodate this, XSBench provides an MPI mode which runs the code on all MPI ranks simultaneously. There is no decomposition across ranks of any kind, and all ranks accomplish the same work. This is a "weak scaling" approach -- for instance, if running the event-based model all MPI ranks will execute 17,000,000 cross section lookups regardless of how many ranks are used. There is only one point of MPI communication (a reduce) at the end, which aggregates the timing statistics and averages them across MPI ranks before printing them out. MPI support can be enabled with the makefile flag "MPI". If you are not using the mpicc wrapper on your system, you may need to alter the makefile to make use of your desired compiler.
-
-### AML Optimizations
-
-AML is a memory management library featuring optimization abtractions. More information about the library can be found in the [online documentation](https://argo-aml.readthedocs.io/en/latest/). The library can be downloaded and installed from the [repository](https://xgitlab.cels.anl.gov/argo/aml).
-
-XSBench can be compiled to include these optimizations by toggling `make` `AML=yes` option. In order for `pkg-config` to find out the appropriate compilation flags, environment variable `PKG_CONFIG_PATH` must point to the install directory of `aml.pc`.
-
-Current optimizations featured in XSBench are as follow:
-- **replicaset**: Performance sensitive data structures are replicated on memories close to processing elements. If a group of processing elements have several close memories (e.g a NUMA cluster on Intel Knights Landing processor with has both a MCDRAM and DRAM memory modules) then the memory with the smallest latency is elected. Upon accessing sensitive data, the accessor location is looked up and the closest replica (latency wise) is accessed.
-
-Optimizations implementation and availability may depend on the programming model. In the current version the following programming models feature AML optimizations:
-- **openmp-threading**: replicaset.
-
-### Verification Support
 
 Legacy versions of XSBench had a special "Verification" compiler flag option to enable verification of the results. However, a much more performant and portable verification scheme was developed and is now used for all configurations -- therefore, it is not necessary to compile with or without the verification mode as it is always enabled by default. XSBench generates a hash of the results at the end of the simulation and displays it with the other data once the code has completed executing. This hash can then be verified against hashes that other versions or configurations of the code generate. For instance, running XSBench with 4 threads vs 8 threads (on a machine that supports that configuration) should generate the same hash number. Running on GPU vs CPU should not change the hash number. However, changing the model / run parameters is expected to generate a totally different hash number (i.e., increasing the number of particles, number of gridpoints, etc, will result in different hashes). However, changing the type of lookup performed (e.g., nuclide, unionized, or hash) should result in the same hash being generated. Changing the simulation mode (history or event) will generate different hashes.
 
